@@ -2,7 +2,7 @@
 // is that we're doing reactivity tracking on top. The main thing we gain from this is more
 // efficient list updates and it spares us having to assign unique identifiers to list entries.
 pub trait Changeable {
-    type Change;
+    type Change: Default;
 
     fn apply(&mut self, change: Self::Change);
 }
@@ -10,6 +10,12 @@ pub trait Changeable {
 pub enum PrimitiveChange<T> {
     Keep,
     ReplaceBy(T),
+}
+
+impl<T> Default for PrimitiveChange<T> {
+    fn default() -> Self {
+        PrimitiveChange::Keep
+    }
 }
 
 impl<T> PrimitiveChange<T> {
@@ -69,6 +75,14 @@ macro_rules! changeable_struct {
                 $field_visibility $field_name:
                     <$field_type as $crate::reactivity::Changeable>::Change,
             )*
+        }
+
+        impl std::default::Default for $changeable_name {
+            fn default() -> Self {
+                Self {
+                    $($field_name: std::default::Default::default(),)*
+                }
+            }
         }
 
         impl $crate::reactivity::Changeable for $name {
