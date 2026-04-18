@@ -29,6 +29,8 @@ pub trait Widget<Out> {
     fn init(&self) -> Self::State;
 
     fn handle_key_event(&self, state: &mut Self::State, event: KeyEvent) -> Option<Out>;
+
+    fn update(&self, state: &mut Self::State);
 }
 
 impl WidgetState for &'static str {
@@ -52,5 +54,10 @@ impl<Out> Widget<Out> for &'static str {
 
     fn handle_key_event(&self, _state: &mut Self::State, _event: KeyEvent) -> Option<Out> {
         None
+    }
+
+    fn update(&self, state: &mut Self::State) {
+        // TODO: remove. This isn't a reactive widget.
+        *state = self;
     }
 }

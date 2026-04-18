@@ -39,4 +39,8 @@ impl<Out, H: Fn(KeyEvent) -> Option<Out>, W: Widget<Out>> Widget<Out> for WithKe
             .handle_key_event(&mut state.0, event)
             .or_else(|| (self.handler)(event))
     }
+
+    fn update(&self, state: &mut Self::State) {
+        self.widget.update(&mut state.0);
+    }
 }

@@ -30,6 +30,8 @@ pub fn run(widget: impl Widget<()>) -> Result<()> {
             if !handled && event.code == KeyCode::Char('q') {
                 break;
             }
+
+            widget.update(&mut state);
         }
     }
     ratatui::restore();

@@ -1,12 +1,13 @@
 // This is loosely inspired by the paper Purely Functional Incremental Computing. The big difference
 // is that we're doing reactivity tracking on top. The main thing we gain from this is more
 // efficient list updates and it spares us having to assign unique identifiers to list entries.
-pub trait Changeable {
-    type Change: Default;
+pub trait Changeable: 'static + Copy {
+    type Change: Clone + Default;
 
-    fn apply(&mut self, change: Self::Change);
+    fn apply(self, change: Self::Change) -> Self;
 }
 
+#[derive(Clone)]
 pub enum PrimitiveChange<T> {
     Keep,
     ReplaceBy(T),
@@ -19,10 +20,10 @@ impl<T> Default for PrimitiveChange<T> {
 }
 
 impl<T> PrimitiveChange<T> {
-    fn apply(self, value: &mut T) {
+    fn apply(self, value: T) -> T {
         match self {
-            PrimitiveChange::Keep => (),
-            PrimitiveChange::ReplaceBy(new_value) => *value = new_value,
+            PrimitiveChange::Keep => value,
+            PrimitiveChange::ReplaceBy(new_value) => new_value,
         }
     }
 }
@@ -32,8 +33,8 @@ macro_rules! impl_primitive_change {
         impl Changeable for $t {
             type Change = PrimitiveChange<$t>;
 
-            fn apply(&mut self, change: Self::Change) {
-                change.apply(self);
+            fn apply(self, change: Self::Change) -> Self {
+                change.apply(self)
             }
         }
     };
