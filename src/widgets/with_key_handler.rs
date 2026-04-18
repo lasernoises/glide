@@ -1,10 +1,13 @@
 use crossterm::event::KeyEvent;
 use ratatui::prelude::{self, Position, Rect};
 
-use crate::widget::{Focus, Focusable, Widget, WidgetState};
+use crate::{
+    reactivity::ReactivityNodes,
+    widget::{Focus, Focusable, Widget, WidgetState},
+};
 
 pub fn with_key_handler<Out>(
-    handler: impl Fn(KeyEvent) -> Option<Out>,
+    handler: impl Copy + Fn(KeyEvent) -> Option<Out>,
     widget: impl Widget<Out>,
 ) -> impl Widget<Out> {
     WithKeyHandler { handler, widget }
@@ -15,32 +18,45 @@ struct WithKeyHandler<H, W> {
     widget: W,
 }
 
-struct State<S>(S);
+struct State<H, S> {
+    handler: H,
+    inner: S,
+}
 
-impl<S: WidgetState> WidgetState for State<S> {
+impl<Out, H: Fn(KeyEvent) -> Option<Out>, S: WidgetState<Out>> WidgetState<Out> for State<H, S> {
     fn reset_focus(&mut self) -> Focusable {
         Focusable::Yes
     }
 
     fn draw(&self, focus: Focus, area: Rect, buffer: &mut prelude::Buffer) -> Option<Position> {
-        self.0.draw(focus, area, buffer)
+        self.inner.draw(focus, area, buffer)
+    }
+
+    fn handle_key_event(
+        &mut self,
+        reactivity_nodes: &mut crate::reactivity::ReactivityNodes,
+        event: KeyEvent,
+    ) -> Option<Out> {
+        self.inner
+            .handle_key_event(reactivity_nodes, event)
+            .or_else(|| (self.handler)(event))
     }
 }
 
-impl<Out, H: Fn(KeyEvent) -> Option<Out>, W: Widget<Out>> Widget<Out> for WithKeyHandler<H, W> {
-    type State = State<W::State>;
+impl<Out, H: Copy + Fn(KeyEvent) -> Option<Out>, W: Widget<Out>> Widget<Out>
+    for WithKeyHandler<H, W>
+{
+    type State = State<H, W::State>;
 
-    fn init(&self) -> Self::State {
-        State(self.widget.init())
-    }
-
-    fn handle_key_event(&self, state: &mut Self::State, event: KeyEvent) -> Option<Out> {
-        self.widget
-            .handle_key_event(&mut state.0, event)
-            .or_else(|| (self.handler)(event))
+    fn init(&self, reactivity_nodes: &mut ReactivityNodes) -> Self::State {
+        State {
+            handler: self.handler,
+            inner: self.widget.init(reactivity_nodes),
+        }
     }
 
     fn update(&self, state: &mut Self::State) {
-        self.widget.update(&mut state.0);
+        state.handler = self.handler;
+        self.widget.update(&mut state.inner);
     }
 }

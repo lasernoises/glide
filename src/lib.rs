@@ -1,7 +1,10 @@
 use color_eyre::eyre::Result;
 use crossterm::event::{self, Event, KeyCode};
 
-use crate::widget::{Focus::*, Widget, WidgetState};
+use crate::{
+    reactivity::ReactivityNodes,
+    widget::{Focus::*, Widget, WidgetState},
+};
 
 pub mod list_content;
 pub mod reactivity;
@@ -9,7 +12,8 @@ pub mod widget;
 pub mod widgets;
 
 pub fn run(widget: impl Widget<()>) -> Result<()> {
-    let mut state = widget.init();
+    let mut reactivity_nodes = ReactivityNodes::new();
+    let mut state = widget.init(&mut reactivity_nodes);
 
     color_eyre::install()?;
     let mut terminal = ratatui::init();
@@ -25,7 +29,9 @@ pub fn run(widget: impl Widget<()>) -> Result<()> {
         let event = event::read()?;
 
         if let Event::Key(event) = event {
-            let handled = widget.handle_key_event(&mut state, event).is_some();
+            let handled = state
+                .handle_key_event(&mut reactivity_nodes, event)
+                .is_some();
 
             if !handled && event.code == KeyCode::Char('q') {
                 break;

@@ -7,4 +7,5 @@ edition = "2024"
 color-eyre = "0.6.3"
 crossterm = "0.29.0"
 ratatui = "0.30.0"
+slotmap = "1.1.1"
 tui-input = { version = "0.15.0", features = ["crossterm"] }

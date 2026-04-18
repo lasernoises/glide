@@ -5,6 +5,8 @@ use ratatui::{
     widgets::Widget as _,
 };
 
+use crate::reactivity::ReactivityNodes;
+
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Focusable {
     No,
@@ -17,23 +19,27 @@ pub enum Focus {
     Focused,
 }
 
-pub trait WidgetState {
+pub trait WidgetState<Out> {
     fn reset_focus(&mut self) -> Focusable;
 
     fn draw(&self, focus: Focus, area: Rect, buffer: &mut Buffer) -> Option<Position>;
+
+    fn handle_key_event(
+        &mut self,
+        reactivity_nodes: &mut ReactivityNodes,
+        event: KeyEvent,
+    ) -> Option<Out>;
 }
 
 pub trait Widget<Out> {
-    type State: WidgetState;
+    type State: WidgetState<Out>;
 
-    fn init(&self) -> Self::State;
-
-    fn handle_key_event(&self, state: &mut Self::State, event: KeyEvent) -> Option<Out>;
+    fn init(&self, reactivity_nodes: &mut ReactivityNodes) -> Self::State;
 
     fn update(&self, state: &mut Self::State);
 }
 
-impl WidgetState for &'static str {
+impl<Out> WidgetState<Out> for &'static str {
     fn reset_focus(&mut self) -> Focusable {
         Focusable::No
     }
@@ -43,17 +49,17 @@ impl WidgetState for &'static str {
 
         None
     }
+
+    fn handle_key_event(&mut self, _: &mut ReactivityNodes, _: KeyEvent) -> Option<Out> {
+        None
+    }
 }
 
 impl<Out> Widget<Out> for &'static str {
     type State = Self;
 
-    fn init(&self) -> Self::State {
+    fn init(&self, _: &mut ReactivityNodes) -> Self::State {
         self
-    }
-
-    fn handle_key_event(&self, _state: &mut Self::State, _event: KeyEvent) -> Option<Out> {
-        None
     }
 
     fn update(&self, state: &mut Self::State) {
