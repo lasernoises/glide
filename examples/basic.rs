@@ -1,4 +1,5 @@
 use glide::{
+    reactivity::Ctx,
     run,
     widgets::{
         state::{change, state},
@@ -8,19 +9,19 @@ use glide::{
 
 fn main() {
     run(state(
-        || 0,
+        || 0i32,
         |value| {
             with_key_handler(
                 move |event| match event.code {
                     crossterm::event::KeyCode::Char('+') => Some(change(
-                        glide::reactivity::PrimitiveChange::ReplaceBy(value + 1),
+                        glide::reactivity::PrimitiveChange::ReplaceBy(value.read_untracked() + 1),
                     )),
                     crossterm::event::KeyCode::Char('-') => Some(change(
-                        glide::reactivity::PrimitiveChange::ReplaceBy(value - 1),
+                        glide::reactivity::PrimitiveChange::ReplaceBy(value.read_untracked() - 1),
                     )),
                     _ => None,
                 },
-                &*value.to_string().leak(),
+                move |ctx: &mut Ctx| value.read(ctx).to_string(),
             )
         },
     ))

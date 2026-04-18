@@ -18,19 +18,134 @@ impl ReactivityNodes {
     pub fn insert_new(&mut self) -> ReactivityNodeKey {
         self.0.insert(ReactivityNode {
             generation: 0,
-            dirty: false,
+            dirty: true,
             dependents: Vec::new(),
         })
     }
 
+    /// Recursively mark all dependents and dependents of dependens as dirty.
     pub fn mark_dirty(&mut self, key: ReactivityNodeKey) {
-        // todo!()
+        fn inner(
+            reactivity_nodes: &mut ReactivityNodes,
+            dependents: &mut Vec<(u64, ReactivityNodeKey)>,
+        ) {
+            dependents.retain_mut(|(generation, dependent_key)| {
+                let Some(dependent) = reactivity_nodes.0.get_mut(*dependent_key) else {
+                    // filter out dependents that no longer exist
+                    return false;
+                };
+
+                // filter out things that are no longer dependent
+                if dependent.generation > *generation {
+                    return false;
+                }
+
+                dependent.dirty = true;
+
+                let mut dependents = std::mem::replace(&mut dependent.dependents, Vec::new());
+
+                // We could do this without an `inner` function and just call `mark_dirty` again
+                // with the key. That would mean an additional `get_mut` each time though.
+                inner(reactivity_nodes, &mut dependents);
+
+                let leftover_vec = std::mem::replace(
+                    &mut reactivity_nodes
+                        .0
+                        .get_mut(*dependent_key)
+                        .unwrap()
+                        .dependents,
+                    dependents,
+                );
+
+                // Just a sanity check.
+                assert!(leftover_vec.is_empty());
+
+                true
+            });
+        }
+
+        let node = self.0.get_mut(key).unwrap();
+
+        let mut dependents = std::mem::replace(&mut node.dependents, Vec::new());
+
+        inner(self, &mut dependents);
+
+        let leftover_vec =
+            std::mem::replace(&mut self.0.get_mut(key).unwrap().dependents, dependents);
+
+        // Just a sanity check.
+        assert!(leftover_vec.is_empty());
     }
 }
 
 pub struct Ctx<'a> {
-    reactivity_nodes: &'a mut ReactivityNodes,
-    dependent: ReactivityNodeKey,
+    pub(crate) reactivity_nodes: &'a mut ReactivityNodes,
+    pub(crate) dependent: ReactivityNodeKey,
+}
+
+impl<'a> Ctx<'a> {
+    /// Add the `dependent` of `self` to the `dependents` of `key`.
+    pub fn track(&mut self, key: ReactivityNodeKey) {
+        let node = self.reactivity_nodes.0.get_mut(key).unwrap();
+
+        let mut dependents = std::mem::replace(&mut node.dependents, Vec::new());
+        let mut push = true;
+
+        dependents.retain_mut(|(generation, dependent_key)| {
+            let Some(dependent) = self.reactivity_nodes.0.get(*dependent_key) else {
+                // filter out dependents that no longer exist
+                return false;
+            };
+
+            if *dependent_key == self.dependent {
+                *generation = dependent.generation;
+                push = false;
+            }
+
+            true
+        });
+
+        if push {
+            let dependent = self.reactivity_nodes.0.get(self.dependent).unwrap();
+            dependents.push((dependent.generation, self.dependent));
+        }
+
+        let leftover_vec = std::mem::replace(
+            &mut self.reactivity_nodes.0.get_mut(key).unwrap().dependents,
+            dependents,
+        );
+
+        // Just a sanity check.
+        assert!(leftover_vec.is_empty());
+    }
+}
+
+pub struct Effect {
+    key: ReactivityNodeKey,
+}
+
+impl Effect {
+    pub fn new(reactivity_nodes: &mut ReactivityNodes) -> Self {
+        Effect {
+            key: reactivity_nodes.insert_new(),
+        }
+    }
+
+    pub fn call(&self, ctx: &mut Ctx, mut closure: impl FnMut(&mut Ctx)) {
+        ctx.track(self.key);
+
+        let node = &mut ctx.reactivity_nodes.0[self.key];
+
+        if node.dirty {
+            node.dirty = false;
+            node.generation += 1;
+
+            closure(&mut Ctx {
+                reactivity_nodes: ctx.reactivity_nodes,
+                dependent: self.key,
+            });
+        }
+    }
 }
 
 // This is loosely inspired by the paper Purely Functional Incremental Computing. The big difference
@@ -87,6 +202,17 @@ impl<T> PrimitiveChange<T> {
 pub struct PrimitiveRead<T: Copy> {
     value: T,
     node: ReactivityNodeKey,
+}
+
+impl<T: Copy> PrimitiveRead<T> {
+    pub fn read(&self, ctx: &mut Ctx) -> T {
+        ctx.track(self.node);
+        self.value
+    }
+
+    pub fn read_untracked(&self) -> T {
+        self.value
+    }
 }
 
 macro_rules! impl_primitive_change {

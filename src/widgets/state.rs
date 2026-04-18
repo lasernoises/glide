@@ -2,13 +2,13 @@ use crossterm::event::KeyEvent;
 use ratatui::prelude::{Buffer, Position, Rect};
 
 use crate::{
-    reactivity::{Changeable, ReactivityNodes},
+    reactivity::{Changeable, Ctx, ReactivityNodes},
     widget::{self, Focus, Widget, WidgetState},
 };
 
 pub fn state<Out, T: Changeable + 'static, W: Widget<StateOut<T::Change, Out>>>(
     init: impl Fn() -> T,
-    content: impl Fn(T) -> W,
+    content: impl Fn(T::Read) -> W,
 ) -> impl Widget<Out> {
     State { init, content }
 }
@@ -67,22 +67,24 @@ impl<Out, T: Changeable, S: WidgetState<StateOut<T::Change, Out>>> WidgetState<O
     }
 }
 
-impl<Out, T: Changeable, W: Widget<StateOut<T::Change, Out>>, I: Fn() -> T, C: Fn(T) -> W>
+impl<Out, T: Changeable, W: Widget<StateOut<T::Change, Out>>, I: Fn() -> T, C: Fn(T::Read) -> W>
     Widget<Out> for State<I, C>
 {
     type State = StateState<T, W::State>;
 
-    fn init(&self, reactivity_nodes: &mut ReactivityNodes) -> Self::State {
+    fn init(&self, ctx: &mut Ctx) -> Self::State {
         let value = (self.init)();
+
+        let reactivity = value.init_reactivity(ctx.reactivity_nodes);
 
         StateState {
             value,
-            reactivity: value.init_reactivity(reactivity_nodes),
-            inner: (self.content)(value).init(reactivity_nodes),
+            reactivity,
+            inner: (self.content)(value.read(reactivity)).init(ctx),
         }
     }
 
-    fn update(&self, state: &mut Self::State) {
-        (self.content)(state.value).update(&mut state.inner);
+    fn update(&self, ctx: &mut Ctx, state: &mut Self::State) {
+        (self.content)(state.value.read(state.reactivity)).update(ctx, &mut state.inner);
     }
 }

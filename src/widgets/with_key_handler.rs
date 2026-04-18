@@ -2,7 +2,7 @@ use crossterm::event::KeyEvent;
 use ratatui::prelude::{self, Position, Rect};
 
 use crate::{
-    reactivity::ReactivityNodes,
+    reactivity::{Ctx, ReactivityNodes},
     widget::{Focus, Focusable, Widget, WidgetState},
 };
 
@@ -48,15 +48,15 @@ impl<Out, H: Copy + Fn(KeyEvent) -> Option<Out>, W: Widget<Out>> Widget<Out>
 {
     type State = State<H, W::State>;
 
-    fn init(&self, reactivity_nodes: &mut ReactivityNodes) -> Self::State {
+    fn init(&self, ctx: &mut Ctx) -> Self::State {
         State {
             handler: self.handler,
-            inner: self.widget.init(reactivity_nodes),
+            inner: self.widget.init(ctx),
         }
     }
 
-    fn update(&self, state: &mut Self::State) {
+    fn update(&self, ctx: &mut Ctx, state: &mut Self::State) {
         state.handler = self.handler;
-        self.widget.update(&mut state.inner);
+        self.widget.update(ctx, &mut state.inner);
     }
 }
